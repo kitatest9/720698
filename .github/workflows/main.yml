@@ -7,16 +7,29 @@ jobs:
     steps:
       - name: Setup Password
         run: |
-          # Mac par user default 'runner' hota hai
-          sudo dscl . -passwd /Users/runner 1111
+          # Password set karne ka latest tareeqa
+          sudo sysadminctl -adminUser runner -adminPassword "" -password "1111"
           
-      - name: Setup Tailscale
+      - name: Download and Install Tailscale
         run: |
-          curl -fsSL https://tailscale.com | sh
-          sudo tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps
+          # Aapka diya hua link use ho raha hai
+          curl -L "https://pkgs.tailscale.com" -o tailscale.zip
+          unzip tailscale.zip
+          # Mac app ko Applications mein move karna
+          sudo mv Tailscale.app /Applications/
+          
+      - name: Start Tailscale
+        run: |
+          # Tailscale ko CLI se start karna
+          /Applications/Tailscale.app/Contents/MacOS/Tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps &
+          sleep 10
           
       - name: Enable Screen Sharing (VNC)
         run: |
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
-          echo "Mac VPS is Live! Use VNC Viewer on Mobile."
+          echo "Mac VPS ready! Connect using Tailscale IP."
+          
+      - name: Keep Alive
+        run: |
+          # 6 hours limit
           sleep 21600

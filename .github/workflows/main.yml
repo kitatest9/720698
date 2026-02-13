@@ -1,0 +1,22 @@
+name: Mobile-Mac-VPS
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Setup Password
+        run: |
+          # Mac par user default 'runner' hota hai
+          sudo dscl . -passwd /Users/runner 1111
+          
+      - name: Setup Tailscale
+        run: |
+          curl -fsSL https://tailscale.com | sh
+          sudo tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps
+          
+      - name: Enable Screen Sharing (VNC)
+        run: |
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
+          echo "Mac VPS is Live! Use VNC Viewer on Mobile."
+          sleep 21600

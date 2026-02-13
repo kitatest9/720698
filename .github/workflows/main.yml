@@ -7,34 +7,29 @@ jobs:
     steps:
       - name: Setup Password
         run: |
-          # Naya user password set karne ka sahi tareeqa
           sudo sysadminctl -adminUser runner -adminPassword "" -password "1111"
           
-      - name: Install Tailscale via Homebrew
+      - name: Install Tailscale (Fast Method)
         run: |
-          # Homebrew se Tailscale-app (GUI + CLI) install karna sabse best hai
-          brew install --cask tailscale
+          # Direct stable binary download
+          curl -fsSL https://pkgs.tailscale.com -o tailscale.zip
+          unzip tailscale.zip
+          # Sirf binary ko extract karke use kar rahe hain
+          sudo cp -r Tailscale-*.app /Applications/Tailscale.app
           
-      - name: Start Tailscale
+      - name: Connect Tailscale
         run: |
-          # Tailscale app ko open karke login process start karna
-          open -a Tailscale
-          sleep 10
-          # CLI command se auth key ke zariye connect karna
-          /Applications/Tailscale.app/Contents/MacOS/Tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps
+          # Background mein service start karna
+          sudo /Applications/Tailscale.app/Contents/MacOS/tailscaled --tun=userspace-networking &
+          sleep 5
+          # Aapki di hui key use ho rahi hai
+          sudo /Applications/Tailscale.app/Contents/MacOS/tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps
           
-      - name: Enable VNC and Set Password
+      - name: Enable Screen Sharing
         run: |
-          # VNC server ko command line se activate aur password set karna
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -allowAccessFor -allUsers -privs -all
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes
-          # Neeche '1111' aapka VNC password hai
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw 1111
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
-          echo "Mac VPS ready! Connect via Tailscale IP using VNC."
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
+          echo "VPS is LIVE! Use Tailscale IP in VNC Viewer."
           
       - name: Keep Alive
         run: |
-          # 6 hours (21600 seconds) tak runner ko on rakhega
           sleep 21600
-          

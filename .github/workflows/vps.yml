@@ -1,4 +1,4 @@
-name: Pro_VPS_Fixed_Loop
+name: Pro_VPS_Final_Fixed
 on:
   push:
   workflow_dispatch:
@@ -16,11 +16,13 @@ jobs:
         run: |
           sudo apt update && sudo apt install tmate curl wget tar -y
           
-          # 1. Cloudflared (Tunnel) Install
-          wget -q https://github.com
-          sudo dpkg -i cloudflared-linux-amd64.deb
+          # 1. Cloudflared Official Install (Using Repo)
+          sudo mkdir -p --mode=0755 /usr/share/keyrings
+          curl -fsSL https://pkg.cloudflare.com | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com noble main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+          sudo apt update && sudo apt install cloudflared -y
           
-          # 2. FileBrowser Manual Install (Fixed Download from GitHub)
+          # 2. FileBrowser Install (Fixed Download)
           wget -q https://github.com
           tar -xzf linux-amd64-filebrowser.tar.gz
           sudo mv filebrowser /usr/local/bin/
@@ -31,38 +33,38 @@ jobs:
           git config --global user.name "VPS-User"
           git config --global user.email "bot@github.com"
           git add .
-          git commit -m "Manual Save: $(date)"
+          git commit -m "Auto-Save: $(date)" || echo "Nothing to save"
           git push origin main
-          echo "✅ Files GitHub par save ho gayi hain!"' | sudo tee /usr/local/bin/savecode
+          echo "✅ Work saved to GitHub!"' | sudo tee /usr/local/bin/savecode
           sudo chmod +x /usr/local/bin/savecode
 
       - name: Start Services & Send Links
         run: |
-          # File Manager Start (No Auth)
+          # Start File Manager
           nohup filebrowser --noauth --address 0.0.0.0 --port 8080 --root . > /dev/null 2>&1 &
           
-          # Cloudflare Tunnel Start (Wait for link)
+          # Start Cloudflare Tunnel
           nohup cloudflared tunnel --url http://localhost:8080 > cf.log 2>&1 &
           
-          # Tmate Start
+          # Start Tmate
           tmate -S /tmp/tmate.sock new-session -d
           
-          # 40 seconds wait taake Cloudflare link generate ho jaye
-          sleep 40
+          # Wait for tunnel link
+          sleep 45
           
-          # Links Collect
+          # Get Links
           SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
           CF_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1)
           
           # Discord Alert
           curl -X POST -H "Content-Type: application/json" -d "{
             \"embeds\": [{
-              \"title\": \"🔥 Pro VPS Started (Fixed)\",
-              \"color\": 15158332,
+              \"title\": \"🚀 VPS Online - All Systems Fixed\",
+              \"color\": 3066993,
               \"fields\": [
-                {\"name\": \"💻 Terminal (SSH)\", \"value\": \"\`$SSH_LINK\`\", \"inline\": false},
-                {\"name\": \"📁 File Manager (Cloudflare)\", \"value\": \"$CF_URL\", \"inline\": false},
-                {\"name\": \"📝 Save Code\", \"value\": \"Type \`savecode\` in terminal\", \"inline\": false}
+                {\"name\": \"💻 SSH\", \"value\": \"\`$SSH_LINK\`\", \"inline\": false},
+                {\"name\": \"📁 File Manager\", \"value\": \"$CF_URL\", \"inline\": false},
+                {\"name\": \"📝 Manual Save\", \"value\": \"Type \`savecode\`\", \"inline\": true}
               ]
             }]
           }" ${{ secrets.DISCORD_WEBHOOK }}
@@ -70,8 +72,7 @@ jobs:
       - name: 5.5-Hour Loop & Auto-Save
         run: |
           sleep 20000
-          # Auto-Save before restart
-          savecode || echo "Nothing to save"
+          /usr/local/bin/savecode || true
           
           # Trigger Next Cycle
           curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \

@@ -1,11 +1,11 @@
-name: Marin VPS 
+name: VPS 
 
 on:
   workflow_dispatch:
   repository_dispatch:
 
 concurrency:
-  group: marin-vps
+  group: vps
   cancel-in-progress: true
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
     - name: 📂 Checkout Code
       uses: actions/checkout@v3
       with:
-        token: ${{ secrets.PAT_TOKEN }}
+        token: ${{ secrets.GH_TOKEN }}
         fetch-depth: 0
 
     - name: 🟢 Setup Node.js 22
@@ -53,7 +53,7 @@ jobs:
       run: |
         git config --global user.email "marin-bot@auto.sync"
         git config --global user.name "Marin Auto-Saver"
-        git remote set-url origin https://${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git
+        git remote set-url origin https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git
         
         echo "**/node_modules/" >> .gitignore
         echo "**/*.log" >> .gitignore
@@ -65,7 +65,7 @@ jobs:
         echo 'mv /tmp/.github_hidden ./.github' >> savecode 
         echo 'git add .' >> savecode
         echo 'git commit -m "💾 Auto-saved Multi-Bot Empire [skip ci]" || echo "No changes to save."' >> savecode
-        echo 'git push origin HEAD || echo "⚠️ Push failed! Check PAT_TOKEN."' >> savecode
+        echo 'git push origin HEAD || echo "⚠️ Push failed! Check GH_TOKEN."' >> savecode
         echo 'mv ./.github /tmp/.github_hidden' >> savecode 
         echo 'echo "✅ Save Process Completed for all bots!"' >> savecode
         
@@ -153,11 +153,11 @@ jobs:
       if: env.RESTART_SAFE == 'true'
       uses: actions/github-script@v6
       with:
-        github-token: ${{ secrets.PAT_TOKEN }}
+        github-token: ${{ secrets.GH_TOKEN }}
         script: |
           await github.rest.actions.createWorkflowDispatch({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            workflow_id: 'marin.yml',
+            workflow_id: 'vps.yml',
             ref: 'main'
           })

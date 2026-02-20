@@ -1,4 +1,4 @@
-name: Marin_Pro_VPS_Simple
+name: Marin_VPS_Fixed
 on:
   workflow_dispatch:
   push:
@@ -14,19 +14,19 @@ jobs:
     - name: 📂 Checkout Code
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GH_TOKEN }} # Check karein ke secret ka naam GH_TOKEN hi hai
+        token: ${{ secrets.GH_TOKEN }} 
         fetch-depth: 0
 
-    - name: 🧹 Install Pro Tools & File Manager
+    - name: 🟢 Install Pro Tools (Fixed Download)
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq tmate curl wget tar
         
-        # 1. Cloudflared Install (Stable)
-        wget -q https://github.com
-        sudo dpkg -i cloudflared-linux-amd64.deb
+        # Cloudflared Direct Download Fix
+        curl -L https://github.com -o cloudflared.deb
+        sudo dpkg -i cloudflared.deb
         
-        # 2. FileBrowser Install (Fixed 24.04)
+        # FileBrowser Direct Download Fix
         wget -q https://github.com
         tar -xzf linux-amd64-filebrowser.tar.gz
         sudo mv filebrowser /usr/local/bin/
@@ -35,28 +35,21 @@ jobs:
       run: |
         git config --global user.email "marin-bot@auto.sync"
         git config --global user.name "Marin Auto-Saver"
-        
-        # .github folder ko temporary hide karna taake push error na aaye
         if [ -d ".github" ]; then mv .github /tmp/.github_hidden; fi
         
         echo '#!/bin/bash
         if [ -d "/tmp/.github_hidden" ]; then mv /tmp/.github_hidden ./.github; fi
         git add .
-        git commit -m "💾 Manual Save: $(date) [skip ci]" || echo "Nothing to save"
+        git commit -m "💾 Save: $(date) [skip ci]" || echo "No changes"
         git push origin HEAD || echo "Push failed!"
-        if [ -d ".github" ]; then mv .github /tmp/.github_hidden; fi
-        echo "✅ Changes pushed to GitHub!"' | sudo tee /usr/local/bin/savecode
+        if [ -d ".github" ]; then mv .github /tmp/.github_hidden; fi' | sudo tee /usr/local/bin/savecode
         sudo chmod +x /usr/local/bin/savecode
 
     - name: 🌐 Start Web Panels & Tunnels
       run: |
-        # File Manager (Port 8080)
         nohup filebrowser -a 0.0.0.0 -p 8080 -r . --noauth > /dev/null 2>&1 &
-        # Cloudflare Tunnel
         nohup cloudflared tunnel --url http://127.0.0.1:8080 > /tmp/cf_file.log 2>&1 &
-        
-        sleep 40 # Tunnel link generate hone ka wait
-        
+        sleep 40 
         FILE_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /tmp/cf_file.log | head -n 1)
         echo "FILE_MANAGER_URL=$FILE_URL" >> $GITHUB_ENV
 
@@ -69,17 +62,14 @@ jobs:
         sleep 10
         SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
         
-        # Discord Payload (Simple & Fast)
-        curl -X POST -H "Content-Type: application/json" -d "{
-          \"content\": \"🚀 **VPS Started!**\n\n📁 **File Manager:** $FILE_MANAGER_URL\n💻 **SSH Terminal:** \`$SSH_LINK\`\n\n📝 **Save changes:** Type \`savecode\` in terminal.\"
+        curl -H "Content-Type: application/json" -d "{
+          \"content\": \"🚀 **VPS Fixed!**\n\n📁 **File Manager:** $FILE_MANAGER_URL\n💻 **SSH:** \`$SSH_LINK\`\n\n📝 **Save:** Type \`savecode\`\"
         }" $DISCORD_WEBHOOK
         
-        # 5.5 Hours Loop Timer
         sleep 20000
-        
-        # Auto-Save and Re-trigger
         savecode || true
         curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
         -H "Accept: application/vnd.github.v3+json" \
         https://api.github.com{{ github.repository }}/actions/workflows/vps.yml/dispatches \
         -d '{"ref":"main"}'
+        

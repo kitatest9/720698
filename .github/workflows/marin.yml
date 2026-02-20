@@ -1,11 +1,11 @@
-name: VPS 
+name: Marin VPS 
 
 on:
   workflow_dispatch:
   repository_dispatch:
 
 concurrency:
-  group: vps
+  group: marin-vps
   cancel-in-progress: true
 
 permissions:
@@ -153,11 +153,11 @@ jobs:
       if: env.RESTART_SAFE == 'true'
       uses: actions/github-script@v6
       with:
-        github-token: ${{ secrets.GH_TOKEN }}
+        github-token: ${{ secrets.PAT_TOKEN }}
         script: |
           await github.rest.actions.createWorkflowDispatch({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            workflow_id: 'vps.yml',
+            workflow_id: 'marin.yml',
             ref: 'main'
           })

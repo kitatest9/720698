@@ -1,4 +1,4 @@
-name: Pro_VPS_Final_Fixed
+name: VPS_Final_Fixed_24.04
 on:
   push:
   workflow_dispatch:
@@ -7,76 +7,52 @@ jobs:
   run-vps:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repo
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Setup Tools & Cloudflare
+      - name: Setup Tools (Manual Binaries)
         run: |
-          sudo apt update && sudo apt install tmate curl wget tar -y
+          sudo apt-get update && sudo apt-get install tmate curl wget tar -y
           
-          # 1. Cloudflared Official Install (Using Repo)
-          sudo mkdir -p --mode=0755 /usr/share/keyrings
-          curl -fsSL https://pkg.cloudflare.com | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com noble main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
-          sudo apt update && sudo apt install cloudflared -y
-          
-          # 2. FileBrowser Install (Fixed Download)
+          # 1. Cloudflared Direct Download
+          wget -q https://github.com -O cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+          # 2. FileBrowser Direct Download
           wget -q https://github.com
           tar -xzf linux-amd64-filebrowser.tar.gz
+          chmod +x filebrowser
           sudo mv filebrowser /usr/local/bin/
-          sudo chmod +x /usr/local/bin/filebrowser
 
-          # 3. Setup 'savecode' Command
-          echo '#!/bin/bash
-          git config --global user.name "VPS-User"
-          git config --global user.email "bot@github.com"
-          git add .
-          git commit -m "Auto-Save: $(date)" || echo "Nothing to save"
-          git push origin main
-          echo "✅ Work saved to GitHub!"' | sudo tee /usr/local/bin/savecode
+          # 3. savecode Command
+          echo -e "#!/bin/bash\ngit config --global user.name 'VPS-Bot'\ngit config --global user.email 'bot@github.com'\ngit add .\ngit commit -m 'Save: \$(date)'\ngit push origin main" | sudo tee /usr/local/bin/savecode
           sudo chmod +x /usr/local/bin/savecode
 
-      - name: Start Services & Send Links
+      - name: Start & Send Links
         run: |
-          # Start File Manager
+          # Start Services
           nohup filebrowser --noauth --address 0.0.0.0 --port 8080 --root . > /dev/null 2>&1 &
-          
-          # Start Cloudflare Tunnel
           nohup cloudflared tunnel --url http://localhost:8080 > cf.log 2>&1 &
-          
-          # Start Tmate
           tmate -S /tmp/tmate.sock new-session -d
           
-          # Wait for tunnel link
           sleep 45
           
-          # Get Links
           SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
           CF_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1)
           
-          # Discord Alert
+          # Discord Send
           curl -X POST -H "Content-Type: application/json" -d "{
-            \"embeds\": [{
-              \"title\": \"🚀 VPS Online - All Systems Fixed\",
-              \"color\": 3066993,
-              \"fields\": [
-                {\"name\": \"💻 SSH\", \"value\": \"\`$SSH_LINK\`\", \"inline\": false},
-                {\"name\": \"📁 File Manager\", \"value\": \"$CF_URL\", \"inline\": false},
-                {\"name\": \"📝 Manual Save\", \"value\": \"Type \`savecode\`\", \"inline\": true}
-              ]
-            }]
+            \"content\": \"🚀 **VPS Started!**\n💻 **SSH:** \`$SSH_LINK\`\n📁 **File Manager:** $CF_URL\n📝 **Save:** Type \`savecode\`\"
           }" ${{ secrets.DISCORD_WEBHOOK }}
 
-      - name: 5.5-Hour Loop & Auto-Save
+      - name: Auto-Save Loop
         run: |
-          sleep 20000
-          /usr/local/bin/savecode || true
-          
-          # Trigger Next Cycle
+          sleep 20400
+          savecode || echo "Nothing to save"
           curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com{{ github.repository }}/actions/workflows/vps.yml/dispatches \
           -d '{"ref":"main"}'
-          

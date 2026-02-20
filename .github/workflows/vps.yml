@@ -1,4 +1,4 @@
-name: VPS 
+name: vps 
 
 on:
   workflow_dispatch:
@@ -42,18 +42,18 @@ jobs:
         sudo apt-get install -y -qq ffmpeg imagemagick webp jq tmate neofetch ttyd btop
         
         # Cloudflared Install Fix
-        curl -L https://github.com -o cloudflared.deb
+        curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
         sudo dpkg -i cloudflared.deb
         
         sudo npm install -g pm2
-        curl -fsSL https://raw.githubusercontent.com | sudo bash
+        curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | sudo bash
         ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
 
     - name: 💾 Setup Ghost Auto-Save (savecode)
       run: |
         git config --global user.email "marin-bot@auto.sync"
         git config --global user.name "Marin Auto-Saver"
-        git remote set-url origin https://${{ secrets.GH_TOKEN }}@://github.com{{ github.repository }}.git
+        git remote set-url origin https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git
         
         echo "**/node_modules/" >> .gitignore
         echo "**/*.log" >> .gitignore
@@ -63,7 +63,7 @@ jobs:
         echo '#!/bin/bash' > savecode
         echo 'echo "⏳ Saving ALL BOTS to GitHub..."' >> savecode
         echo 'mv /tmp/.github_hidden ./.github' >> savecode 
-        git add .
+        echo 'git add .' >> savecode
         echo 'git commit -m "💾 Auto-saved Multi-Bot Empire [skip ci]" || echo "No changes to save."' >> savecode
         echo 'git push origin HEAD || echo "⚠️ Push failed! Check GH_TOKEN."' >> savecode
         echo 'mv ./.github /tmp/.github_hidden' >> savecode 
@@ -77,7 +77,6 @@ jobs:
         echo "runner:${{ secrets.SSH_PASSWORD }}" | sudo chpasswd
         sudo usermod -aG sudo runner
 
-    # --- 🚀 ADVANCED MULTI-BOT ENGINE ---
     - name: 🚀 Auto-Detect & Start All Bots (PM2)
       env:
         MONGODB: ${{ secrets.MONGODB }}
@@ -87,96 +86,67 @@ jobs:
       run: |
         echo "🔍 Scanning for Bot Folders..."
         BOT_LIST=""
-        
         for dir in */ ; do
           if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
             BOT_NAME=$(basename "$dir")
-            
-            if [ -z "$BOT_LIST" ]; then
-              BOT_LIST="$BOT_NAME"
-            else
-              BOT_LIST="$BOT_LIST, $BOT_NAME"
-            fi
-            
-            echo "⚙️ Initializing Bot: $BOT_NAME"
+            BOT_LIST="${BOT_LIST}${BOT_NAME}, "
             cd "$dir"
             npm install
-            
-            if [ -f "index.js" ]; then
-               pm2 start index.js --name "$BOT_NAME"
-            else
-               pm2 start npm --name "$BOT_NAME" -- start
-            fi
+            if [ -f "index.js" ]; then pm2 start index.js --name "$BOT_NAME"; else pm2 start npm --name "$BOT_NAME" -- start; fi
             cd ..
           fi
         done
         pm2 save
-        echo "ACTIVE_BOTS=${BOT_LIST:-'No bots found! Check folder structure.'}" >> $GITHUB_ENV
+        echo "ACTIVE_BOTS=$BOT_LIST" >> $GITHUB_ENV
 
-    # --- 🌐 OPEN WEB PANELS SETUP ---
     - name: 🌐 Start Open Web Panels & Btop
       run: |
         set +e 
-        
-        # 1. Start File Manager (No Password Mode)
         filebrowser -a 0.0.0.0 -p 8080 -r . --noauth > /tmp/filebrowser.log 2>&1 &
-        
-        # 2. Start Btop Graph (No Password Mode)
         ttyd -R -p 61208 btop > /tmp/btop.log 2>&1 &
-        sleep 3
-        
-        # Start Cloudflare Tunnels
+        sleep 5
         cloudflared tunnel --url http://127.0.0.1:8080 > /tmp/cf_file.log 2>&1 &
         cloudflared tunnel --url http://127.0.0.1:61208 > /tmp/cf_btop.log 2>&1 &
-        
-        sleep 15
-        
+        sleep 20
         FILE_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /tmp/cf_file.log | head -n 1)
         BTOP_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /tmp/cf_btop.log | head -n 1)
-        
-        echo "FILE_MANAGER_URL=${FILE_URL:-'⚠️ Cloudflare Error'}" >> $GITHUB_ENV
-        echo "BTOP_URL=${BTOP_URL:-'⚠️ Cloudflare Error'}" >> $GITHUB_ENV
+        echo "FILE_MANAGER_URL=$FILE_URL" >> $GITHUB_ENV
+        echo "BTOP_URL=$BTOP_URL" >> $GITHUB_ENV
 
-    # --- 🔄 TMATE SSH & OPEN ALERT (WITH AUTO-RESTART) ---
     - name: 🔄 Start Tmate Loop & Discord Alert
       env:
         DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
       run: |
-        set +e 
+        set +e
         echo "RESTART_SAFE=true" >> $GITHUB_ENV
         
-        # 5.5 Hours Timer
         END_TIME=$(( $(date +%s) + 20700 )) 
 
         while [ $(date +%s) -lt $END_TIME ]; do
+           echo "🚀 Starting Tmate Session..."
            tmate -S /tmp/tmate.sock kill-session 2>/dev/null || true
            rm -f /tmp/tmate.sock
            tmate -S /tmp/tmate.sock new-session -d
            tmate -S /tmp/tmate.sock wait tmate-ready
-           sleep 10
+           sleep 15
            
            SSH_MSG=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
            
            if [[ "$SSH_MSG" == *"tmate.io"* ]]; then
-              
-              PAYLOAD=$(jq -n \
-                --arg ssh "$SSH_MSG" \
-                --arg fileUrl "$FILE_MANAGER_URL" \
-                --arg btopUrl "$BTOP_URL" \
-                --arg bots "$ACTIVE_BOTS" \
-                '{content: "🚨 **VPS Dashboard Update** 🚨\n\n🤖 **Bots:** `\($bots)`\n📁 **File:** \($fileUrl)\n📊 **Health:** \($btopUrl)\n💻 **SSH:** `\($ssh)`\n\n_💡 Save changes using `savecode`_"}')
+              PAYLOAD=$(jq -n --arg ssh "$SSH_MSG" --arg file "$FILE_MANAGER_URL" --arg btop "$BTOP_URL" --arg bots "$ACTIVE_BOTS" \
+                '{content: "🚨 **VPS Dashboard Restarted**\n🤖 **Bots:** `\($bots)`\n📁 **File:** \($file)\n📊 **Btop:** \($btop)\n💻 **SSH:** `\($ssh)`"}')
               
               curl -H "Content-Type: application/json" -d "$PAYLOAD" $DISCORD_WEBHOOK
               
-              # Wait until session dies or loop time ends
+              # Wait until tmate session dies OR 6h limit hits
               while pgrep -x "tmate" > /dev/null && [ $(date +%s) -lt $END_TIME ]; do
-                 sleep 60
+                 sleep 30
               done
+              echo "⚠️ Tmate closed. Restarting loop..."
            fi
-           echo "⚠️ Tmate stopped or exited. Restarting session..."
            sleep 5
         done
-        
+
         savecode || true
         exit 0
 
@@ -192,3 +162,4 @@ jobs:
             workflow_id: 'vps.yml',
             ref: 'main'
           })
+          

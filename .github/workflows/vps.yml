@@ -1,58 +1,85 @@
-name: VPS_Final_Fixed_24.04
+name: Marin_Pro_VPS_Simple
 on:
-  push:
   workflow_dispatch:
+  push:
+
+permissions:
+  actions: write
+  contents: write
 
 jobs:
-  run-vps:
+  ultimate-vps:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_TOKEN }}
+    - name: 📂 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GH_TOKEN }} # Check karein ke secret ka naam GH_TOKEN hi hai
+        fetch-depth: 0
 
-      - name: Setup Tools (Manual Binaries)
-        run: |
-          sudo apt-get update && sudo apt-get install tmate curl wget tar -y
-          
-          # 1. Cloudflared Direct Download
-          wget -q https://github.com -O cloudflared
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
+    - name: 🧹 Install Pro Tools & File Manager
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq tmate curl wget tar
+        
+        # 1. Cloudflared Install (Stable)
+        wget -q https://github.com
+        sudo dpkg -i cloudflared-linux-amd64.deb
+        
+        # 2. FileBrowser Install (Fixed 24.04)
+        wget -q https://github.com
+        tar -xzf linux-amd64-filebrowser.tar.gz
+        sudo mv filebrowser /usr/local/bin/
 
-          # 2. FileBrowser Direct Download
-          wget -q https://github.com
-          tar -xzf linux-amd64-filebrowser.tar.gz
-          chmod +x filebrowser
-          sudo mv filebrowser /usr/local/bin/
+    - name: 💾 Setup 'savecode' Command
+      run: |
+        git config --global user.email "marin-bot@auto.sync"
+        git config --global user.name "Marin Auto-Saver"
+        
+        # .github folder ko temporary hide karna taake push error na aaye
+        if [ -d ".github" ]; then mv .github /tmp/.github_hidden; fi
+        
+        echo '#!/bin/bash
+        if [ -d "/tmp/.github_hidden" ]; then mv /tmp/.github_hidden ./.github; fi
+        git add .
+        git commit -m "💾 Manual Save: $(date) [skip ci]" || echo "Nothing to save"
+        git push origin HEAD || echo "Push failed!"
+        if [ -d ".github" ]; then mv .github /tmp/.github_hidden; fi
+        echo "✅ Changes pushed to GitHub!"' | sudo tee /usr/local/bin/savecode
+        sudo chmod +x /usr/local/bin/savecode
 
-          # 3. savecode Command
-          echo -e "#!/bin/bash\ngit config --global user.name 'VPS-Bot'\ngit config --global user.email 'bot@github.com'\ngit add .\ngit commit -m 'Save: \$(date)'\ngit push origin main" | sudo tee /usr/local/bin/savecode
-          sudo chmod +x /usr/local/bin/savecode
+    - name: 🌐 Start Web Panels & Tunnels
+      run: |
+        # File Manager (Port 8080)
+        nohup filebrowser -a 0.0.0.0 -p 8080 -r . --noauth > /dev/null 2>&1 &
+        # Cloudflare Tunnel
+        nohup cloudflared tunnel --url http://127.0.0.1:8080 > /tmp/cf_file.log 2>&1 &
+        
+        sleep 40 # Tunnel link generate hone ka wait
+        
+        FILE_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /tmp/cf_file.log | head -n 1)
+        echo "FILE_MANAGER_URL=$FILE_URL" >> $GITHUB_ENV
 
-      - name: Start & Send Links
-        run: |
-          # Start Services
-          nohup filebrowser --noauth --address 0.0.0.0 --port 8080 --root . > /dev/null 2>&1 &
-          nohup cloudflared tunnel --url http://localhost:8080 > cf.log 2>&1 &
-          tmate -S /tmp/tmate.sock new-session -d
-          
-          sleep 45
-          
-          SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
-          CF_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1)
-          
-          # Discord Send
-          curl -X POST -H "Content-Type: application/json" -d "{
-            \"content\": \"🚀 **VPS Started!**\n💻 **SSH:** \`$SSH_LINK\`\n📁 **File Manager:** $CF_URL\n📝 **Save:** Type \`savecode\`\"
-          }" ${{ secrets.DISCORD_WEBHOOK }}
-
-      - name: Auto-Save Loop
-        run: |
-          sleep 20400
-          savecode || echo "Nothing to save"
-          curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com{{ github.repository }}/actions/workflows/vps.yml/dispatches \
-          -d '{"ref":"main"}'
+    - name: 🔄 Start Tmate & Discord Alert
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        tmate -S /tmp/tmate.sock new-session -d
+        tmate -S /tmp/tmate.sock wait tmate-ready
+        sleep 10
+        SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
+        
+        # Discord Payload (Simple & Fast)
+        curl -X POST -H "Content-Type: application/json" -d "{
+          \"content\": \"🚀 **VPS Started!**\n\n📁 **File Manager:** $FILE_MANAGER_URL\n💻 **SSH Terminal:** \`$SSH_LINK\`\n\n📝 **Save changes:** Type \`savecode\` in terminal.\"
+        }" $DISCORD_WEBHOOK
+        
+        # 5.5 Hours Loop Timer
+        sleep 20000
+        
+        # Auto-Save and Re-trigger
+        savecode || true
+        curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        https://api.github.com{{ github.repository }}/actions/workflows/vps.yml/dispatches \
+        -d '{"ref":"main"}'

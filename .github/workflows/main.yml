@@ -1,35 +1,76 @@
-name: Mobile-Mac-VPS
-on: workflow_dispatch
+name: Pro_VPS_Cloudflare_Loop
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: macos-latest
+  run-vps:
+    runs-on: ubuntu-latest
     steps:
-      - name: Setup Password
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Tools & Cloudflare
         run: |
-          sudo sysadminctl -adminUser runner -adminPassword "" -password "1111"
+          sudo apt update && sudo apt install tmate curl wget tar -y
+          # Cloudflared (Tunnel) Install
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
           
-      - name: Install Tailscale (Fast Method)
+          # Filebrowser Install
+          curl -fsSL https://raw.githubusercontent.com | bash
+
+      - name: Setup 'savecode' Command
         run: |
-          # Direct stable binary download
-          curl -fsSL https://pkgs.tailscale.com -o tailscale.zip
-          unzip tailscale.zip
-          # Sirf binary ko extract karke use kar rahe hain
-          sudo cp -r Tailscale-*.app /Applications/Tailscale.app
+          # Custom 'savecode' command banana
+          echo '#!/bin/bash
+          git config --global user.name "VPS-User"
+          git config --global user.email "bot@github.com"
+          git add .
+          git commit -m "Manual Save: $(date)"
+          git push origin main
+          echo "✅ Code GitHub par save ho gaya hai!"' > /usr/local/bin/savecode
+          sudo chmod +x /usr/local/bin/savecode
+
+      - name: Start Services & Send Links
+        run: |
+          # 1. File Manager Start (Port 8080)
+          nohup filebrowser --noauth --address 0.0.0.0 --port 8080 --root . > /dev/null 2>&1 &
           
-      - name: Connect Tailscale
-        run: |
-          # Background mein service start karna
-          sudo /Applications/Tailscale.app/Contents/MacOS/tailscaled --tun=userspace-networking &
-          sleep 5
-          # Aapki di hui key use ho rahi hai
-          sudo /Applications/Tailscale.app/Contents/MacOS/tailscale up --authkey=tskey-auth-kMH4hKgqVY11CNTRL-guT4SrPpK2aoRrxjCWRt1aMZYMREkinc --hostname=mac-vps
+          # 2. Cloudflare Tunnel Start (For File Manager)
+          nohup cloudflared tunnel --url http://localhost:8080 > cf.log 2>&1 &
           
-      - name: Enable Screen Sharing
-        run: |
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
-          echo "VPS is LIVE! Use Tailscale IP in VNC Viewer."
+          # 3. Tmate Start (For Terminal)
+          tmate -S /tmp/tmate.sock new-session -d
+          sleep 30
           
-      - name: Keep Alive
+          # Links Collect Karna
+          SSH_LINK=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
+          CF_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1)
+          
+          # Discord Alert
+          curl -X POST -H "Content-Type: application/json" -d "{
+            \"embeds\": [{
+              \"title\": \"🔥 Pro VPS Started\",
+              \"color\": 15158332,
+              \"fields\": [
+                {\"name\": \"💻 Terminal (SSH)\", \"value\": \"\`$SSH_LINK\`\", \"inline\": false},
+                {\"name\": \"📁 File Manager (Cloudflare)\", \"value\": \"$CF_URL\", \"inline\": false},
+                {\"name\": \"📝 Save Code Command\", \"value\": \"Type \`savecode\` in terminal\", \"inline\": false}
+              ]
+            }]
+          }" ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: 6-Hour Loop & Auto-Save
         run: |
-          sleep 21600
+          sleep 20400
+          savecode # Auto-save before restart
+          
+          # Trigger Next Cycle
+          curl -X POST -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com{{ github.repository }}/actions/workflows/vps.yml/dispatches \
+          -d '{"ref":"main"}'
+          

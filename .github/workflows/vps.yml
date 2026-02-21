@@ -1,11 +1,11 @@
-name: vps 
+name: VPS 
 
 on:
   workflow_dispatch:
   repository_dispatch:
 
 concurrency:
-  group: marin-vps
+  group: vps
   cancel-in-progress: true
 
 permissions:
@@ -120,29 +120,28 @@ jobs:
         set +e
         echo "RESTART_SAFE=true" >> $GITHUB_ENV
         
+        # --- 6 Hour Total Timer Start ---
         END_TIME=$(( $(date +%s) + 20700 )) 
 
         while [ $(date +%s) -lt $END_TIME ]; do
-           echo "🚀 Starting Tmate Session..."
            tmate -S /tmp/tmate.sock kill-session 2>/dev/null || true
            rm -f /tmp/tmate.sock
            tmate -S /tmp/tmate.sock new-session -d
            tmate -S /tmp/tmate.sock wait tmate-ready
-           sleep 15
+           sleep 10
            
            SSH_MSG=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
            
            if [[ "$SSH_MSG" == *"tmate.io"* ]]; then
               PAYLOAD=$(jq -n --arg ssh "$SSH_MSG" --arg file "$FILE_MANAGER_URL" --arg btop "$BTOP_URL" --arg bots "$ACTIVE_BOTS" \
-                '{content: "🚨 **VPS Dashboard Restarted**\n🤖 **Bots:** `\($bots)`\n📁 **File:** \($file)\n📊 **Btop:** \($btop)\n💻 **SSH:** `\($ssh)`"}')
+                '{content: "🚨 **VPS Dashboard Update**\n🤖 **Bots:** `\($bots)`\n📁 **File:** \($file)\n📊 **Btop:** \($btop)\n💻 **SSH:** `\($ssh)`"}')
               
               curl -H "Content-Type: application/json" -d "$PAYLOAD" $DISCORD_WEBHOOK
               
               # Wait until tmate session dies OR 6h limit hits
               while pgrep -x "tmate" > /dev/null && [ $(date +%s) -lt $END_TIME ]; do
-                 sleep 30
+                 sleep 60
               done
-              echo "⚠️ Tmate closed. Restarting loop..."
            fi
            sleep 5
         done
@@ -162,4 +161,3 @@ jobs:
             workflow_id: 'vps.yml',
             ref: 'main'
           })
-          

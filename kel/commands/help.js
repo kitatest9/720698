@@ -1,14 +1,9 @@
 import fs from 'fs';
 import { getTheme } from '../themeloader.js';
+import { createRequire } from 'module';
 import os from 'os'; 
-
-// Baileys imports (Converted to ESM)// help.js ke top par sirf ye rakhein:
-import pkg from '@kelvdra/baileys';
-const { 
-    generateWAMessageFromContent, 
-    proto,
-    prepareWAMessageMedia 
-} = pkg.default || pkg;
+const require = createRequire(import.meta.url)
+import { generateWAMessageFromContent, proto, prepareWAMessageMedia } from '@kelvdra/baileys';
 
 const combo3Style = (text) => {
     const caps = {

@@ -1,17 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from './config.js';
-// Baileys essential imports
-import pkg from '@kelvdra/baileys';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 
-// Sabse safe method ESM ke liye:
-const { 
+// Baileys essential imports
+import { 
     generateWAMessageFromContent, 
     proto, 
     prepareWAMessageMedia, 
     delay, 
-    downloadContentFromMessage 
-} = pkg.default || pkg; // Agar pkg.default hai to wo use karega, warna package
+    downloadContentFromMessage } from '@kelvdra/baileys';
 
 // --- DATABASE SETUP ---
 const dbPath = './database.json';
@@ -158,7 +157,8 @@ export const handleMessages = async (sock, chatUpdate) => {
                         continue;
                     }
                     const metadata = await sock.groupMetadata(from);
-                    const isAdmin = metadata.participants.find(p => p.id === sender)?.admin !== null;
+                    const participant = metadata.participants.find(p => p.id === sender);
+                    const isAdmin = participant?.admin === 'admin' || participant?.admin === 'superadmin';
 
                     if (!isAdmin && !isOwner) {
                         const msg = generateWAMessageFromContent(from, {
@@ -185,9 +185,10 @@ export const handleMessages = async (sock, chatUpdate) => {
 
                 // --- 3. EXECUTION ---
                 try {
+                    const botId = (sock.user.id.split(':') || sock.user.id) + '@s.whatsapp.net';
                     await cmd.execute(sock, m, args, { 
                         config, isOwner, isGroup, db, saveDB, 
-                        pushName, sender, senderNumber, 
+                        pushName, sender, senderNumber, botId, 
                         proto, generateWAMessageFromContent, prepareWAMessageMedia 
                     });
                 } catch (e) {

@@ -1,21 +1,21 @@
 import { handleMessages } from './main.js';
 import { config } from './config.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 
-// Sab kuch direct import karein
-import * as baileys from '@kelvdra/baileys';
-const { 
-    default: makeWASocket, 
+import { 
+    makeWASocket, 
     useMultiFileAuthState, 
-    fetchLatestBaileysVersion, 
     DisconnectReason, 
     makeCacheableSignalKeyStore, 
+    fetchLatestBaileysVersion, 
     Browsers 
-} = baileys;
+} from '@kelvdra/baileys';
 
-import { Boom } from '@hapi/boom';
-import pino from 'pino';
-import fs from 'fs';
-import readline from 'readline';
+const { Boom } = require('@hapi/boom');
+const pino = require('pino');
+const fs = require('fs');
+const readline = require('readline');
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));

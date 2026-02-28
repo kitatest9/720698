@@ -49,14 +49,21 @@ export const command = {
             // 4. Update Status to Uploading (Editing the previous message text)
             const uploadingCaption = initialCaption.replace("Downloading Audio...", "Uploading to WhatsApp...");
             await sock.sendMessage(from, { text: uploadingCaption, edit: mainMsg.key });
-
-            // 5. FFMPEG Streaming
+            
+            // 5. FFMPEG Streaming (Fix for 4XX Error)
             const audioStream = new PassThrough();
             ffmpeg(data.downloadURL)
+                .inputOptions([
+                    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+                    '-reconnect', '1',
+                    '-reconnect_streamed', '1',
+                    '-reconnect_delay_max', '5'
+                ]) // Yeh line 4XX Error khatam karegi
                 .toFormat('mp3')
                 .audioBitrate(128)
                 .on('error', (err) => console.error('FFMPEG Error:', err.message))
                 .pipe(audioStream);
+
 
             // 6. Final File Send
             const finalCaption = `🎬 *KEL Audio Downloader*\n\n` +
